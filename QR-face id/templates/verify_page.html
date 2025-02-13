@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>生物識別驗證</title>
+    <script>
+      async function checkBiometricRegistered(email) {
+        const response = await fetch(`/check_biometric?email=${email}`);
+        const result = await response.json();
+        return result.registered;
+      }
+
+      async function isBiometricAvailable() {
+        if (!window.PublicKeyCredential) {
+          console.log("瀏覽器不支援 WebAuthn");
+          return false;
+        }
+
+        try {
+          const available =
+            await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          console.log("設備支援 WebAuthn:", available);
+          return available;
+        } catch (error) {
+          console.error("檢查 WebAuthn 可用性失敗:", error);
+          return false;
+        }
+      }
+
+      async function startBioAuth(email, subject, isFirstTime) {
+        try {
+          console.log("開始生物識別驗證...");
+          const biometricData = await collectBiometricData();
+          if (!biometricData) return;
+
+          const action = isFirstTime ? "biometric-init" : "biometric-verify";
+          const response = await fetch("/biometric_auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email,
+              subject,
+              action,
+              biometric_data: biometricData,
+            }),
+          });
+
+          const result = await response.json();
+          if (result.status === "success") {
+            document.getElementById("attendance-result").innerHTML = `
+                        <p>姓名: ${result.name}</p>
+                        <p>科目: ${result.subject}</p>
+                        <p>狀態: ${result.attendance_status}</p>
+                        <p>時間: ${result.time}</p>
+                    `;
+          } else {
+            alert(result.message);
+          }
+        } catch (error) {
+          console.error("生物識別操作失敗：", error);
+          alert("生物識別操作失敗，請稍後重試！");
+        }
+      }
+
+      async function collectBiometricData() {
+        if (!window.PublicKeyCredential) {
+          alert("此瀏覽器不支援 WebAuthn！");
+          return null;
+        }
+
+        try {
+          console.log("開始 WebAuthn 生物識別驗證...");
+
+          // 使用隨機數產生 challenge 與 user id
+          const challenge = new Uint8Array(32);
+          window.crypto.getRandomValues(challenge);
+
+          const userId = new Uint8Array(16);
+          window.crypto.getRandomValues(userId);
+
+          const credential = await navigator.credentials.create({
+            publicKey: {
+              challenge: challenge,
+              rp: { name: "出席系統" ,
+                    id: "192.168.1.64"
+              },
+              user: {
+                id: userId,
+                name: "user",
+                displayName: "User",
+              },
+              pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+              authenticatorSelection: {
+                authenticatorAttachment: "platform",
+                userVerification: "required",
+              },
+              attestation: "none", // 加上此設定
+              timeout: 60000,
+            },
+          });
+
+          if (!credential || !credential.response) {
+            console.error(
+              "未能取得有效的 credential 或 response：",
+              credential
+            );
+            throw new Error("未能取得 credential 或 response 物件");
+          }
+
+          console.log("WebAuthn 驗證成功！", credential);
+          return btoa(
+            String.fromCharCode(
+              ...new Uint8Array(credential.response.clientDataJSON)
+            )
+          );
+        } catch (error) {
+          console.error("WebAuthn 驗證失敗:", error);
+          alert(
+            `生物識別驗證失敗：${error.message || error}`
+          );
+          return null;
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", async function () {
+        const email = "{{ email }}";
+        const subject = "{{ subject }}";
+        const biometricAvailable = await isBiometricAvailable();
+
+        if (!biometricAvailable) {
+          alert("您的裝置不支援生物識別驗證！");
+          return;
+        }
+
+        const isRegistered = await checkBiometricRegistered(email);
+        if (isRegistered) startBioAuth(email, subject, false);
+      });
+    </script>
+  </head>
+  <body>
+    <h1>生物識別驗證</h1>
+    <p>請進行生物識別驗證完成出席</p>
+    <div id="attendance-result"></div>
+    <button
+      id="test-bioauth"
+      onclick="startBioAuth('{{ email }}', '{{ subject }}', false)"
+    >
+      手動測試生物識別驗證
+    </button>
+  </body>
+</html>

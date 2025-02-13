@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>出席系統</title>
+    <script>
+        let scanning = false;
+        let videoStream = null;
+
+        function updateSubjectsAndAttendees() {
+            const grade = document.getElementById('grade').value;
+            if (!grade) return;  // 確保選擇了年級
+
+            const subjects = JSON.parse(document.getElementById('subjects-data').textContent);
+            const attendees = JSON.parse(document.getElementById('attendees-data').textContent);
+
+            // 更新科目選項
+            const subjectSelect = document.getElementById('subject');
+            subjectSelect.innerHTML = '';
+            subjects[grade].forEach(subject => {
+                const option = document.createElement('option');
+                option.value = subject;
+                option.textContent = subject;
+                subjectSelect.appendChild(option);
+            });
+
+            // 更新姓名選項
+            const nameSelect = document.getElementById('name');
+            nameSelect.innerHTML = '';
+            attendees[grade].forEach(attendee => {
+                const option = document.createElement('option');
+                option.value = attendee.email;
+                option.textContent = attendee.name;
+                nameSelect.appendChild(option);
+            });
+        }
+
+        function sendQrData(data) {
+            fetch('/verify_qr', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                 body: JSON.stringify({ data: data })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('网络验证失败');
+            }
+            return response.json();
+        })
+        .then(result => {
+            if (result.status === 'success') {
+                document.getElementById('attendance-result').innerHTML = `
+                    <p>姓名: ${result.name}</p>
+                    <p>科目: ${result.subject}</p>
+                    <p>狀態: ${result.attendance_status}</p>
+                    <p>時間: ${result.time}</p>
+                `;
+                stopScanning();
+            } else {
+                alert(result.message);
+            }
+        })
+        .catch(error => {
+            alert('无法进行验证：' + error.message);
+            console.error('Error:', error);
+        });
+    }
+
+    function startScanning() {
+        if (scanning) return;
+        scanning = true;
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream) {
+            videoStream = stream;
+            const video = document.getElementById('video');
+            video.srcObject = stream;
+            video.play();
+
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+
+            video.addEventListener('play', function() {
+                function tick() {
+                    if (!scanning) return;
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: 'dontInvert',
+                        });
+                        if (code) {
+                            sendQrData(code.data);
+                            setTimeout(() => {
+                                if (scanning) requestAnimationFrame(tick);
+                            }, 3000); // 延遲1秒後再進行下一次掃描
+                            return;
+                        }
+                    }
+                    requestAnimationFrame(tick);
+                }
+                requestAnimationFrame(tick);
+            });
+        });
+    }
+
+        function stopScanning() {
+            scanning = false;
+            if (videoStream) {
+                const tracks = videoStream.getTracks();
+                tracks.forEach(track => track.stop());
+                videoStream = null;
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-size: 22px;  /* 設定全頁的文字大小 */
+        }
+
+        h1{
+            font-size: 40px;  /* 設定標題文字大小 */
+        }
+
+        label, select {
+            font-size: 20px;  /* 設定標籤和下拉選單的文字大小 */
+        }
+
+        #verify-button {
+            position: absolute;
+            top: 330px;
+            right: 100px;
+            width: 200px; /* 設定按鈕寬度 */
+            height: 50px; /* 設定按鈕高度 */
+            font-size: 20px; /* 設定按鈕文字大小 */
+            padding: 10px 20px; /* 增加按鈕內邊距 */
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        #verify-button:hover {
+            background-color: #45a049; /* 按鈕懸停時的顏色 */
+        }
+
+        button {
+            margin-top: 30px;
+            font-size: 18px; /* 設定提交按鈕文字大小 */
+            padding: 10px 20px; /* 增加按鈕內邊距 */
+            background-color: #007bff; /* 設定按鈕顏色 */
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        h4{
+            font-size: 20px;  /* 設定標題文字大小 */
+            margin-top: 20px;
+        }
+
+        h2{
+            font-size: 24px;  /* 設定標題文字大小 */
+            top: 0px;
+            left: 0px;
+        }
+
+        video {
+            top: 0px;
+            left: 0px;
+            width: 100%; /* 讓視頻自動調整大小 */
+            max-width: 600px; /* 設定視頻最大寬度 */
+        }
+
+        h3{
+            margin-top: -90px;
+            font-size: 24px;  /* 設定標題文字大小 */
+        }
+    </style>
+</head>
+<body>
+    <h1>出席系統</h1>
+    <form action="/generate_qr" method="post">
+        <label for="grade">選擇年級:</label>
+        <select id="grade" name="grade" onchange="updateSubjectsAndAttendees()">
+            <option value="" disabled selected>請選擇年級</option>
+            {% for grade in grades %}
+            <option value="{{ grade }}">{{ grade }} 年級</option>
+            {% endfor %}
+        </select>
+        <br>
+        <label for="name">姓名:</label>
+        <select id="name" name="name" required>
+            <!-- 根據選擇年級自動更新姓名選項 -->
+        </select>
+        <br>
+        <label for="subject">科目:</label>
+        <select id="subject" name="subject">
+            <!-- 根據選擇年級自動更新科目選項 -->
+        </select>
+        <br>
+        <button type="submit">發送 QR 碼</button>
+        <h4>QR碼以傳送到你的電子信箱</h4>
+    </form>
+
+    <br>
+    <div>
+        <h2>使用相機進行 QR 碼驗證</h2>
+        <button id="verify-button" onclick="startScanning()">進行 QR 碼驗證</button>
+        <video id="video" width="300" height="200" autoplay></video>
+    </div>
+    <div>
+        <h3>出席結果</h3>
+        <div id="attendance-result">
+            <!-- 這裡將顯示出席者的姓名、是否出席、科目和時間 -->
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr"></script>
+    <script id="subjects-data" type="application/json">{{ subjects | tojson }}</script>
+    <script id="attendees-data" type="application/json">{{ attendees | tojson }}</script>
+
+</body>
+</html>

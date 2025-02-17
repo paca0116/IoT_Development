@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>出席系統</title>
+    <title>出席システム</title>
     <script>
         let scanning = false;
         let videoStream = null;
 
         function updateSubjectsAndAttendees() {
             const grade = document.getElementById('grade').value;
-            if (!grade) return;  // 確保選擇了年級
+            if (!grade) return;  // 学年を選択したことを確認
 
             const subjects = JSON.parse(document.getElementById('subjects-data').textContent);
             const attendees = JSON.parse(document.getElementById('attendees-data').textContent);
 
-            // 更新科目選項
+            // 科目オプションを更新
             const subjectSelect = document.getElementById('subject');
             subjectSelect.innerHTML = '';
             subjects[grade].forEach(subject => {
@@ -25,7 +25,7 @@
                 subjectSelect.appendChild(option);
             });
 
-            // 更新姓名選項
+            // 名前オプションを更新
             const nameSelect = document.getElementById('name');
             nameSelect.innerHTML = '';
             attendees[grade].forEach(attendee => {
@@ -46,7 +46,7 @@
         })
         .then(response => {
             if (!response.ok) {
-                throw new Error('网络验证失败');
+                throw new Error('ネットワーク認証に失敗しました');
             }
             return response.json();
         })
@@ -55,7 +55,7 @@
                 document.getElementById('attendance-result').innerHTML = `
                     <p>姓名: ${result.name}</p>
                     <p>科目: ${result.subject}</p>
-                    <p>狀態: ${result.attendance_status}</p>
+                    <p>状態: ${result.attendance_status}</p>
                     <p>時間: ${result.time}</p>
                 `;
                 stopScanning();
@@ -64,7 +64,7 @@
             }
         })
         .catch(error => {
-            alert('无法进行验证：' + error.message);
+            alert('認証を実行できませんでした:：' + error.message);
             console.error('Error:', error);
         });
     }
@@ -97,7 +97,7 @@
                             sendQrData(code.data);
                             setTimeout(() => {
                                 if (scanning) requestAnimationFrame(tick);
-                            }, 3000); // 延遲1秒後再進行下一次掃描
+                            }, 3000); // 1秒遅延して次のスキャンを実行
                             return;
                         }
                     }
@@ -119,25 +119,25 @@
     </script>
     <style>
         body {
-            font-size: 22px;  /* 設定全頁的文字大小 */
+            font-size: 22px;  /* ページ全体の文字サイズを設定 /
         }
 
         h1{
-            font-size: 40px;  /* 設定標題文字大小 */
+            font-size: 40px;  / タイトルの文字サイズを設定 /
         }
 
         label, select {
-            font-size: 20px;  /* 設定標籤和下拉選單的文字大小 */
+            font-size: 20px;  / ラベルとドロップダウンの文字サイズを設定 /
         }
 
         #verify-button {
             position: absolute;
             top: 330px;
             right: 100px;
-            width: 200px; /* 設定按鈕寬度 */
-            height: 50px; /* 設定按鈕高度 */
-            font-size: 20px; /* 設定按鈕文字大小 */
-            padding: 10px 20px; /* 增加按鈕內邊距 */
+            width: 200px; / ボタンの幅を設定 /
+            height: 50px; / ボタンの高さを設定 /
+            font-size: 20px; / ボタンの文字サイズを設定 /
+            padding: 10px 20px; / ボタンのパディングを増やす /
             background-color: #4CAF50;
             color: white;
             border: none;
@@ -145,26 +145,26 @@
         }
 
         #verify-button:hover {
-            background-color: #45a049; /* 按鈕懸停時的顏色 */
+            background-color: #45a049; / ボタンのホバー時の色設定 /
         }
 
         button {
             margin-top: 30px;
-            font-size: 18px; /* 設定提交按鈕文字大小 */
-            padding: 10px 20px; /* 增加按鈕內邊距 */
-            background-color: #007bff; /* 設定按鈕顏色 */
+            font-size: 18px; / 送信ボタンの文字サイズを設定 /
+            padding: 10px 20px; / ボタンのパディングを増やす /
+            background-color: #007bff; / ボタンの色を設定 /
             color: white;
             border: none;
             cursor: pointer;
         }
 
         h4{
-            font-size: 20px;  /* 設定標題文字大小 */
+            font-size: 20px; / タイトルの文字サイズを設定 /
             margin-top: 20px;
         }
 
         h2{
-            font-size: 24px;  /* 設定標題文字大小 */
+            font-size: 24px; / タイトルの文字サイズを設定 /
             top: 0px;
             left: 0px;
         }
@@ -172,51 +172,51 @@
         video {
             top: 0px;
             left: 0px;
-            width: 100%; /* 讓視頻自動調整大小 */
-            max-width: 600px; /* 設定視頻最大寬度 */
+            width: 100%; / ビデオのサイズを自動調整 /
+            max-width: 600px; / ビデオの最大幅を設定 /
         }
 
         h3{
             margin-top: -90px;
-            font-size: 24px;  /* 設定標題文字大小 */
+            font-size: 24px;  / タイトルの文字サイズを設定 */
         }
     </style>
 </head>
 <body>
-    <h1>出席系統</h1>
+    <h1>出席システム</h1>
     <form action="/generate_qr" method="post">
-        <label for="grade">選擇年級:</label>
+        <label for="grade">学年を選択してください:</label>
         <select id="grade" name="grade" onchange="updateSubjectsAndAttendees()">
-            <option value="" disabled selected>請選擇年級</option>
+            <option value="" disabled selected>学年を選択</option>
             {% for grade in grades %}
-            <option value="{{ grade }}">{{ grade }} 年級</option>
+            <option value="{{ grade }}">{{ grade }} 学年</option>
             {% endfor %}
         </select>
         <br>
-        <label for="name">姓名:</label>
+        <label for="name">名前:</label>
         <select id="name" name="name" required>
-            <!-- 根據選擇年級自動更新姓名選項 -->
+            <!-- 選択した学年に基づいて科目の選択肢を自動更新します。 -->
         </select>
         <br>
         <label for="subject">科目:</label>
         <select id="subject" name="subject">
-            <!-- 根據選擇年級自動更新科目選項 -->
+            <!-- 選択した学年に基づいて科目の選択肢を自動更新します。 -->
         </select>
         <br>
-        <button type="submit">發送 QR 碼</button>
-        <h4>QR碼以傳送到你的電子信箱</h4>
+        <button type="submit">QRコードを送信</button>
+        <h4>QRコードはメールで送信されました</h4>
     </form>
 
     <br>
     <div>
-        <h2>使用相機進行 QR 碼驗證</h2>
-        <button id="verify-button" onclick="startScanning()">進行 QR 碼驗證</button>
+        <h2>カメラを使ってQRコードを検証</h2>
+        <button id="verify-button" onclick="startScanning()">QRコードを検証</button>
         <video id="video" width="300" height="200" autoplay></video>
     </div>
     <div>
-        <h3>出席結果</h3>
+        <h3>登録状態</h3>
         <div id="attendance-result">
-            <!-- 這裡將顯示出席者的姓名、是否出席、科目和時間 -->
+            <!-- ここには出席者の名前、出欠状況、科目、時間が表示されます。 -->
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/jsqr"></script>

@@ -30,52 +30,52 @@ from threading import Lock
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 
-# Google Sheets API 驗證
+# Google Sheets API 認証
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 SERVICE_ACCOUNT_FILE = 'credentials.json'
 creds = service_account.Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE, scopes=SCOPES
 )
-# 如果凭证需要刷新（可选步骤）
+# 証明書の更新が必要な場合（オプションの手順）
 creds.refresh(Request())
 
-# 构建 Google Sheets API 服务对象
+# Google Sheets API サービスオブジェクトの構築
 service = build('sheets', 'v4', credentials=creds)
 
 # Google Sheet ID
 SPREADSHEET_ID = '10VVS8F0xmcibUQsyI7ZZkU_gzlyE5Y_hXAHEY2WgH5Q'
 
-# Google Sheets 表格名稱
+# Google Sheets のスプレッドシート名
 ATTENDEES_SHEET = 'Attendees'
 SUBJECTS_SHEET = 'Subjects'
 ATTENDANCE_SHEET = 'Attendance'
 
-# 發送電子郵件的設定
+# メール送信の設定
 load_dotenv()
 SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 SMTP_USERNAME = 'paca0118@gmail.com'
 SMTP_PASSWORD = 'ipmy biow kjla cpvr'
 
-# QR 碼儲存目錄
+# QRコードの保存ディレクトリ
 QR_CODE_DIR = 'static/qr_codes'
 os.makedirs(QR_CODE_DIR, exist_ok=True)
 
-# 教室內部網路的 IP 範圍（可以根據實際網絡調整）
+# 教室内ネットワークのIP範囲（実際のネットワークに応じて調整可能）
 ALLOWED_IP_RANGES = [
-    ipaddress.ip_network('192.168.0.0/24'),  # 假設教室內部網段是 192.168.0.0/24
-    #ipaddress.ip_network('127.0.0.0/8')      # 另一個允許的網段
+    ipaddress.ip_network('192.168.0.0/24'),  # 仮に教室の内部ネットワーク範囲 192.168.0.0/24
+    #ipaddress.ip_network('127.0.0.0/8')     # もう一つの許可されたネットワーク範囲
 ]
 
 def is_ip_allowed(ip):
-    """檢查 IP 是否在允許的網段內"""
+    """IPが許可されたネットワーク範囲内にあるかを確認"""
     try:
         ip_obj = ipaddress.ip_address(ip)
         return any(ip_obj in net for net in ALLOWED_IP_RANGES)
     except ValueError:
         return False
 
-# 自訂上課時間段
+# カスタム授業時間帯
 LESSON_TIMES = [
     {"start": dt_time(8, 30), "end": dt_time(9, 20), "status": "出席"},
     {"start": dt_time(9, 20), "end": dt_time(10, 50), "status": "遲到"},
@@ -85,19 +85,19 @@ LESSON_TIMES = [
     {"start": dt_time(13, 30), "end": dt_time(15, 0), "status": "遲到"},
     {"start": dt_time(15, 0), "end": dt_time(15, 10), "status": "出席"},
     {"start": dt_time(15, 10), "end": dt_time(16, 40), "status": "遲到"},
-    # 你可以自由增加其他時間段
+    # 必要に応じて他の時間帯を自由に追加可能
 ]
 def determine_attendance_status(current_time):
-    """根據當前時間判斷是否為正常出席或遲到"""
+    """現在の時間に基づいて正常出席または遅刻かどうかを判"""
     current_time_only = current_time.time()
     for lesson in LESSON_TIMES:
         if lesson["start"] <= current_time_only <= lesson["end"]:
             return lesson["status"]
-    return "未在上課時間內"
+    return "授業時間外"
 
 @app.route('/')
 def index():
-    # 從 Google Sheets 獲取年級和科目資料
+    # 從 Google Sheets 学年と科目データの取得
     sheet = service.spreadsheets()
     subjects_result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f"{SUBJECTS_SHEET}!A2:B").execute()
     subjects_data = subjects_result.get('values', [])
@@ -107,7 +107,7 @@ def index():
     for row in subjects_data:
         subjects[row[0]].append(row[1])
 
-    # 從 Google Sheets 獲取出席者資料
+    # 從 Google Sheets 出席者データの取得
     attendees_result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f"{ATTENDEES_SHEET}!A2:C").execute()
     attendees_data = attendees_result.get('values', [])
 
@@ -125,34 +125,34 @@ def generate_qr():
     email = request.form['name']
     subject = request.form['subject']
 
-    # 查找出席者資料
+    # 出席者データの検索
     attendees_result = service.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{ATTENDEES_SHEET}!A2:C").execute()
     attendees_data = attendees_result.get('values', [])
     attendee_info = next((attendee for attendee in attendees_data if attendee[0] == email and attendee[2] == grade), None)
 
-     # 確保所有參數都有值
+     # すべてのパラメータに値があることを確認
     if not grade or not email or not subject:
-        flash('缺少必要參數')
+        flash('必要なパラメータが不足しています')
         return redirect(url_for('index'))
 
     timestamp = int(time.time())
-    token = f"{email}|{subject}|{timestamp}"  # 包含科目信息的 Token
+    token = f"{email}|{subject}|{timestamp}"  # 科目情報を含む Token
     qr_data = f"{request.host_url}verify_page?token={token}"  # 在 URL 中嵌入 Token
     img = qrcode.make(qr_data)
     qr_path = os.path.join(QR_CODE_DIR, f'{email}_qr.png')
     img.save(qr_path)
 
-    # 發送帶有鏈接的電子郵件
+    # リンク付きメールの送信
     try:
         msg = MIMEMultipart()
         msg['From'] = SMTP_USERNAME
         msg['To'] = email
-        msg['Subject'] = '您的出席 QR 碼'
+        msg['Subject'] = 'あなたの出席QRコード'
 
         body = f'''
-        請使用以下的 QR 碼進行出席驗證，或點擊圖示跳轉到生物識別驗證頁面：<br>
+       以下のQRコードを使用して出席認証を行うか、画像をクリックしてFace ID認証ページに移動してください：<br>
         <a href="{qr_data}"><img src="cid:qr_code" style="width:200px;height:200px;"></a><br>
-        該碼將在 30 秒後過期。
+        このコードは30秒以内に有効です。
         '''
         msg.attach(MIMEText(body, 'html'))
 
@@ -170,81 +170,77 @@ def generate_qr():
 
 
     except smtplib.SMTPException as e:
-        flash(f'SMTP 身份验证失败，请检查您的 SMTP 用户名和密码：{e}')
+        flash(f'SMTP認証に失敗しました。SMTPのユーザー名とパスワードを確認してください：{e}')
     except smtplib.SMTPException as e:
-        flash(f'無法發送電子郵件，請檢查您的 SMTP 設定: {e}')
+        flash(f'メールを送信できませんでした。SMTPの設定を確認してください: {e}')
     except Exception as e:
-        flash(f'發送郵件失敗：{e}')
+        flash(f'メール送信に失敗しました：{e}')
         return redirect(url_for('index'))
 
-    flash('QR 碼已生成並發送到您的電子郵件。請於 30 秒內完成掃描驗證。')
+    flash('QRコードが生成され、メールに送信されました。30秒以内にスキャンしてください。')
     return redirect(url_for('index'))
 
 verify_qr_lock = Lock()
 @app.route('/verify_qr', methods=['POST'])
 def verify_qr():
     if not verify_qr_lock.acquire(blocking=False):
-        return jsonify({'status': 'error', 'message': '目前有其他驗證正在進行，請稍後再試。', 'pauseCamera': False})
+        return jsonify({'status': 'error', 'message': '現在、他の認証処理が行われています。しばらくしてからもう一度お試しください。', 'pauseCamera': False})
     try:
-        # 調試輸出
+        # デバッグ出力
         print("Received QR data:", request.json)
 
-        # 獲取客戶端的 IP 地址
+        # クライアントのIPアドレスを取得
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
 
-        # 調試輸出 IP 地址
+        # IPアドレスのデバッグ出力
         print(f"Client IP: {client_ip}")
 
-        # 如果是開發環境，跳過 IP 檢查
-        #if os.getenv('FLASK_ENV') == 'development':
-            #client_ip = '192.168.0.1'  # 模擬內部 IP 地址
-
-        # 驗證 IP 地址是否在允許的範圍內
+        # IPアドレスが許可範囲内かを確認
         if not is_ip_allowed(client_ip):
-            return jsonify({'status': 'error', 'message': '您不在允許的網絡內，無法進行出席驗證！'}), 403
+            return jsonify({'status': 'error', 'message': 'あなたは許可されたネットワーク内にいないため、出席認証を行うことができません！'}), 403
 
         data = request.json.get('data')
         print(f"Received QR data: {data}")
         if data:
             try:
-                # 從 URL 中提取 Token
+                # URL からトークンを抽出
                 if "token=" in data:
-                    token = data.split("token=")[1]  # 提取 token
+                    token = data.split("token=")[1]  # トークンの抽出
                 else:
-                    return jsonify({'status': 'error', 'message': 'QR 碼中缺少 Token'})
+                    return jsonify({'status': 'error', 'message': 'QRコードが不足しています Token'})
 
-                # 解析 Token
+                # トークンの解析
                 email, subject, timestamp = token.split('|')
-                print(f"QR碼解析結果 - Email: {email}, Subject: {subject}, Timestamp: {timestamp}")
+                print(f"QRコード解析結果 - Email: {email}, Subject: {subject}, Timestamp: {timestamp}")
 
                 current_time = datetime.now()
                 qr_time = datetime.fromtimestamp(int(timestamp))
 
-                # 確認 QR 碼是否在有效期內
+                # QRコードが有効期限内か確認
                 if (current_time - qr_time).total_seconds() > 30:
-                    return jsonify({'status': 'error', 'message': 'QR 碼已過期！', 'pauseCamera': False})
+                    return jsonify({'status': 'error', 'message': 'QRコードが期限切れです！', 'pauseCamera': False})
 
-                # 從 Google Sheets 查找出席者資料
+                # Google Sheets から出席者データを検索
                 sheet = service.spreadsheets()
                 attendees_result = sheet.values().get(
                     spreadsheetId=SPREADSHEET_ID,
-                    range=f"{ATTENDEES_SHEET}!A2:C"  # 假設 A 列是 Email，B 列是姓名
+                    range=f"{ATTENDEES_SHEET}!A2:C"  # 仮に A 列が Email、B 列が氏名
                 ).execute()
                 attendees_data = attendees_result.get('values', [])
-                print(f"Google Sheets 出席者數據: {attendees_data}")
+                print(f"Google Sheets 出席者データ: {attendees_data}")
 
-                # 匹配 Email
+                # メールアドレスの照合
                 attendee_info = next((attendee for attendee in attendees_data if attendee[0].strip().lower() == email.strip().lower()), None)
                 if not attendee_info:
-                    return jsonify({'status': 'error', 'message': '找不到對應的出席者資料'})
+                    return jsonify({'status': 'error', 'message': '該当する出席者データが見つかりません'})
 
                 name = attendee_info[1]
                 attendance_status = determine_attendance_status(current_time)
 
-                # 獲取客戶端 IP
+                # クライアント IP の取得
                 client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
 
-                # 驗證 IP 是否已被其他用戶使用
+                # IP が他のユーザーに使用されているか確認
                 sheet = service.spreadsheets()
                 existing_records = sheet.values().get(
                     spreadsheetId=SPREADSHEET_ID,
@@ -253,10 +249,10 @@ def verify_qr():
 
                 for record in existing_records:
                     if len(record) >= 7 and record[6] == client_ip and record[0] != name:
-                        return jsonify({'status': 'error', 'message': '該 IP 已被其他用戶使用！'})
+                        return jsonify({'status': 'error', 'message': 'この IP はすでに他のユーザーに使用されています！'})
 
-                # 更新出席表
-                values = [[name, subject, "掃描 QR 碼", attendance_status, current_time.isoformat(), client_ip]]
+                # 出席表の更新
+                values = [[name, subject, "QRコードのスキャン", attendance_status, current_time.isoformat(), client_ip]]
                 body = {'values': values}
                 #sheet = service.spreadsheets()
                 sheet.values().append(
@@ -268,25 +264,25 @@ def verify_qr():
 
                 return jsonify({
                     'status': 'success',
-                    'message': '驗證成功',
+                    'message': '検証に成功しました',
                     'name': name,
                     'subject': subject,
                     'attendance_status': attendance_status,
                     'time': current_time.strftime("%Y-%m-%d %H:%M:%S")
                 })
             except ValueError as e:
-                return jsonify({'status': 'error', 'message': f'無效的 QR 碼格式: {e}'})
+                return jsonify({'status': 'error', 'message': f'無効な QRコードフォーマット: {e}'})
             except Exception as e:
                 app.logger.error(f"Error occurred: {str(e)}")
-                return jsonify({'status': 'error', 'message': f'發生錯誤: {e}'})
-        return jsonify({'status': 'error', 'message': '無效的 QR 碼數據！', 'pauseCamera': False})
+                return jsonify({'status': 'error', 'message': f'エラーが発生しました: {e}'})
+        return jsonify({'status': 'error', 'message': '無効なQRコードデータです！', 'pauseCamera': False})
     finally:
         verify_qr_lock.release()
 
 @app.route('/verify_page', methods=['GET'])
 def verify_page():
     token = request.args.get('token')
-    # 🔹 如果沒有 Token，重新導向到新的 Token
+    #  トークンがない場合、新しいトークンにリダイレクト
     if not token:
         import time
         email = "test@example.com"
@@ -294,28 +290,28 @@ def verify_page():
         new_token = f"{email}|{subject}|{int(time.time())}"
         return redirect(f"/verify_page?token={new_token}")
 
-    # 解碼 Token
+    # トークンのデコード
     try:
-        # 確保解碼邏輯與生成邏輯一致
+        # デコードロジックと生成ロジックが一致していることを確認
         email, subject, timestamp = token.split('|')
         current_time = datetime.now()
         token_time = datetime.fromtimestamp(int(timestamp))
 
 
-        # 確認 Token 是否過期
-        if (current_time - token_time).total_seconds() > 300000000:
-            return "此驗證鏈接已過期！", 403
+        # トークンの有効期限を確認
+        if (current_time - token_time).total_seconds() > 30:
+            return "この認証リンクは期限切れです！", 403
     except ValueError as e:
-        return f"無效的 Token 格式: {e}", 400
+        return f"無効なトークンフォーマット: {e}", 400
     except Exception as e:
-        return f"無效的 Token: {e}", 400
+        return f"無効なトークン: {e}", 400
 
-    # 渲染生物識別驗證頁面，將 email 和 subject 傳遞給模板
+    # 生体認証ページをレンダリングし、email と subject をテンプレートに渡す
     return render_template('verify_page.html', email=email, subject=subject)
 
 @lru_cache(maxsize=100)
 def get_attendees():
-    """快取 Attendees 資料，減少 API 請求"""
+    """Attendees データをキャッシュし、API リクエストを削減""""
     sheet = service.spreadsheets()
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f"{ATTENDEES_SHEET}!A2:D").execute()
     return result.get('values', [])
@@ -324,7 +320,7 @@ def get_attendees():
 def check_biometric():
     email = request.args.get('email')
     if not email:
-        return jsonify({'registered': False, 'message': '缺少 email 參數'})
+        return jsonify({'registered': False, 'message': 'メールアドレスのパラメータが不足しています'})
 
     attendees_data = get_attendees()
     user_row = next((row for row in attendees_data if row[0].strip().lower() == email.strip().lower()), None)
@@ -342,21 +338,21 @@ def biometric_auth():
     biometric_data = data.get('biometric_data')
 
     if not email or not biometric_data:
-        return jsonify({'status': 'error', 'message': '缺少必要參數'})
+        return jsonify({'status': 'error', 'message': '必要なパラメータが不足しています'})
 
-    # 檢查用戶是否已註冊
+    # ユーザーが登録済みか確認
     attendees_data = get_attendees()
     user_row_index = next((i for i, row in enumerate(attendees_data) if row[0].strip().lower() == email.strip().lower()), None)
 
     if user_row_index is None:
-        return jsonify({'status': 'error', 'message': '找不到該用戶'})
+        return jsonify({'status': 'error', 'message': '該当ユーザーが見つかりません'})
 
     existing_biometric_data = attendees_data[user_row_index][3] if len(attendees_data[user_row_index]) > 3 else None
     name = attendees_data[user_row_index][1]
 
     if action == 'biometric-init':
         if existing_biometric_data:
-            return jsonify({'status': 'error', 'message': '生物識別已註冊'})
+            return jsonify({'status': 'error', 'message': '生体認証が登録済み'})
 
         attendees_data[user_row_index].append(biometric_data)
         service.spreadsheets().values().update(
@@ -366,12 +362,12 @@ def biometric_auth():
             body={"values": [[biometric_data]]}
         ).execute()
 
-        return jsonify({'status': 'success', 'message': '生物識別已註冊'})
+        return jsonify({'status': 'success', 'message': '生体認証が登録済み'})
 
     elif action == 'biometric-verify':
         if existing_biometric_data == biometric_data:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            attendance_data = [[name, subject, "生物識別驗證", "出席", current_time]]
+            attendance_data = [[name, subject, "生体認証の確認", "出席", current_time]]
             service.spreadsheets().values().append(
                 spreadsheetId=SPREADSHEET_ID,
                 range=f"{ATTENDANCE_SHEET}!A2:E",
@@ -379,9 +375,9 @@ def biometric_auth():
                 body={"values": attendance_data}
             ).execute()
 
-            return jsonify({'status': 'success', 'message': '驗證成功', 'name': name, 'subject': subject, 'attendance_status': '出席', 'time': current_time})
+            return jsonify({'status': 'success', 'message': '認証成功', 'name': name, 'subject': subject, 'attendance_status': '出席', 'time': current_time})
 
-        return jsonify({'status': 'error', 'message': '生物識別驗證失敗'})
+        return jsonify({'status': 'error', 'message': '生体認証に失敗しました'})
 
 if __name__ == '__main__':
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

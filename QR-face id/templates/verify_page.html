@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>生物識別驗證</title>
+    <title>生体認証確認</title>
     <script>
       async function checkBiometricRegistered(email) {
         const response = await fetch(`/check_biometric?email=${email}`);
@@ -13,24 +13,24 @@
 
       async function isBiometricAvailable() {
         if (!window.PublicKeyCredential) {
-          console.log("瀏覽器不支援 WebAuthn");
+          console.log("このブラウザは WebAuthn をサポートしていません");
           return false;
         }
 
         try {
           const available =
             await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-          console.log("設備支援 WebAuthn:", available);
+          console.log("デバイスは WebAuthn をサポートしています:", available);
           return available;
         } catch (error) {
-          console.error("檢查 WebAuthn 可用性失敗:", error);
+          console.error("WebAuthn の利用可否確認に失敗しました:", error);
           return false;
         }
       }
 
       async function startBioAuth(email, subject, isFirstTime) {
         try {
-          console.log("開始生物識別驗證...");
+          console.log("生体認証の開始...");
           const biometricData = await collectBiometricData();
           if (!biometricData) return;
 
@@ -49,30 +49,30 @@
           const result = await response.json();
           if (result.status === "success") {
             document.getElementById("attendance-result").innerHTML = `
-                        <p>姓名: ${result.name}</p>
+                        <p>名前: ${result.name}</p>
                         <p>科目: ${result.subject}</p>
-                        <p>狀態: ${result.attendance_status}</p>
+                        <p>状態: ${result.attendance_status}</p>
                         <p>時間: ${result.time}</p>
                     `;
           } else {
             alert(result.message);
           }
         } catch (error) {
-          console.error("生物識別操作失敗：", error);
-          alert("生物識別操作失敗，請稍後重試！");
+          console.error("生体認証の操作に失敗しました:", error);
+          alert("生体認証の操作に失敗しました。しばらくしてから再試行してください！");
         }
       }
 
       async function collectBiometricData() {
         if (!window.PublicKeyCredential) {
-          alert("此瀏覽器不支援 WebAuthn！");
+          alert("このブラウザは WebAuthn をサポートしていません！");
           return null;
         }
 
         try {
-          console.log("開始 WebAuthn 生物識別驗證...");
+          console.log("WebAuthn 生体認証の開始...");
 
-          // 使用隨機數產生 challenge 與 user id
+          // ランダムな数値を使用して challenge と user ID を生成
           const challenge = new Uint8Array(32);
           window.crypto.getRandomValues(challenge);
 
@@ -82,7 +82,7 @@
           const credential = await navigator.credentials.create({
             publicKey: {
               challenge: challenge,
-              rp: { name: "出席系統" ,
+              rp: { name: "出席システム" ,
                     id: "192.168.1.64"
               },
               user: {
@@ -95,29 +95,29 @@
                 authenticatorAttachment: "platform",
                 userVerification: "required",
               },
-              attestation: "none", // 加上此設定
+              attestation: "none", // この設定を追加
               timeout: 60000,
             },
           });
 
           if (!credential || !credential.response) {
             console.error(
-              "未能取得有效的 credential 或 response：",
+              "有効な credential または response を取得できませんでした:",
               credential
             );
-            throw new Error("未能取得 credential 或 response 物件");
+            throw new Error("credential または response オブジェクトの取得に失敗しました");
           }
 
-          console.log("WebAuthn 驗證成功！", credential);
+          console.log("WebAuthn 認証成功！", credential);
           return btoa(
             String.fromCharCode(
               ...new Uint8Array(credential.response.clientDataJSON)
             )
           );
         } catch (error) {
-          console.error("WebAuthn 驗證失敗:", error);
+          console.error("WebAuthn 認証失敗:", error);
           alert(
-            `生物識別驗證失敗：${error.message || error}`
+            `生体認証確認に失敗しました：${error.message || error}`
           );
           return null;
         }
@@ -129,7 +129,7 @@
         const biometricAvailable = await isBiometricAvailable();
 
         if (!biometricAvailable) {
-          alert("您的裝置不支援生物識別驗證！");
+          alert("お使いのデバイスは生体認証をサポートしていません！");
           return;
         }
 
@@ -139,14 +139,14 @@
     </script>
   </head>
   <body>
-    <h1>生物識別驗證</h1>
-    <p>請進行生物識別驗證完成出席</p>
+    <h1>生体認証確認</h1>
+    <p>出席を完了するために生体認証を実行してください</p>
     <div id="attendance-result"></div>
     <button
       id="test-bioauth"
       onclick="startBioAuth('{{ email }}', '{{ subject }}', false)"
     >
-      手動測試生物識別驗證
+      生体認証の手動テスト
     </button>
   </body>
 </html>
